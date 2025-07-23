@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PMKSY Performance Clusters</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+
+      header {
+        background-color: #004080;
+        color: white;
+        padding: 10px 20px;
+        text-align: center;
+      }
+
+      .main {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+
+      #sidebar {
+        width: 300px;
+        background-color: #f4f4f4;
+        border-right: 1px solid #ccc;
+        padding: 20px;
+        overflow-y: auto;
+      }
+
+      #sidebar h2 {
+        text-align: center;
+      }
+
+      #map {
+        flex-grow: 1;
+        height: 100%;
+      }
+
+      .cluster-info {
+        margin-bottom: 20px;
+        padding: 10px;
+        border-left: 5px solid;
+      }
+
+      .cluster-suggestion {
+        font-size: 0.9em;
+        color: #333;
+        margin-top: 5px;
+      }
+
+      canvas {
+        max-width: 100%;
+        margin-top: 20px;
+      }
+
+      #stateResult {
+        margin-bottom: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>PMKSY State-Wise Performance Clustering Dashboard</h1>
+    </header>
+    <div class="main">
+      <div id="sidebar">
+        <h2>Search State</h2>
+        <input
+          type="text"
+          id="stateSearch"
+          placeholder="Enter state name..."
+          style="width: 100%; padding: 8px; margin-bottom: 10px"
+        />
+        <div
+          id="stateResult"
+          style="
+            font-size: 0.9em;
+            background: #fff5d1;
+            padding: 10px;
+            border-radius: 5px;
+          "
+        ></div>
+
+        <h2>Cluster Info</h2>
+        <div class="cluster-info" style="border-color: #1f77b4">
+          <strong>Cluster 0</strong><br />
+          <small style="color: #555">Low performance</small>
+          <div class="cluster-suggestion">
+            Prioritize capacity building, increase fund utilization, and improve
+            monitoring mechanisms.
+          </div>
+        </div>
+        <div class="cluster-info" style="border-color: #ff7f0e">
+          <strong>Cluster 1</strong><br />
+          <small style="color: #555">Moderate performance</small>
+          <div class="cluster-suggestion">
+            Focus on efficiency improvements, technology adoption, and timely
+            execution.
+          </div>
+        </div>
+        <div class="cluster-info" style="border-color: #2ca02c">
+          <strong>Cluster 2</strong><br />
+          <small style="color: #555">Good performance</small>
+          <div class="cluster-suggestion">
+            Maintain progress, scale best practices, and ensure sustained
+            impact.
+          </div>
+        </div>
+        <div class="cluster-info" style="border-color: #d62728">
+          <strong>Cluster 3</strong><br />
+          <small style="color: #555">Excellent performance</small>
+          <div class="cluster-suggestion">
+            Model state for replication, explore innovation opportunities, and
+            share expertise.
+          </div>
+        </div>
+
+        <h2>Cluster Distribution</h2>
+        <canvas id="clusterChart"></canvas>
+      </div>
+
+      <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script>
+      const clusterColors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"];
+      const clusterCounts = [0, 0, 0, 0];
+      let stateData = [];
+
+      const map = L.map("map").setView([22.5937, 78.9629], 5);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 10,
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(map);
+
+      fetch("/cluster-data")
+        .then((response) => response.json())
+        .then((geojson) => {
+          stateData = geojson.features.map((f) => f.properties);
+
+          L.geoJSON(geojson, {
+            style: (feature) => {
+              const cluster = feature.properties.cluster ?? 0;
+              clusterCounts[cluster]++;
+              return {
+                fillColor: clusterColors[cluster],
+                color: "#444",
+                weight: 1,
+                fillOpacity: 0.7,
+              };
+            },
+            onEachFeature: (feature, layer) => {
+              const props = feature.properties;
+              layer.bindPopup(`
+              <strong>${props.state_name}</strong><br>
+              Cluster: ${props.cluster}<br>
+              Fund Utilization Ratio: ${(
+                props.fund_utilization_ratio ?? 0
+              ).toFixed(2)}<br>
+              Physical Efficiency: ${(props.physical_efficiency ?? 0).toFixed(
+                2
+              )}<br>
+              Cost per Hectare: ${(props.cost_per_hectare ?? 0).toFixed(2)}
+            `);
+            },
+          }).addTo(map);
+
+          const ctx = document.getElementById("clusterChart").getContext("2d");
+          new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels: ["Cluster 0", "Cluster 1", "Cluster 2", "Cluster 3"],
+              datasets: [
+                {
+                  label: "Number of States",
+                  data: clusterCounts,
+                  backgroundColor: clusterColors,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: { display: false },
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  title: {
+                    display: true,
+                    text: "States Count",
+                  },
+                },
+              },
+            },
+          });
+
+          document
+            .getElementById("stateSearch")
+            .addEventListener("input", function () {
+              const query = this.value.toLowerCase().trim();
+              const resultBox = document.getElementById("stateResult");
+
+              if (!query) {
+                resultBox.innerHTML = "";
+                return;
+              }
+
+              const match = stateData.find(
+                (s) => s.state_name.toLowerCase() === query
+              );
+
+              if (match) {
+                resultBox.innerHTML = `
+              <strong>${match.state_name}</strong><br>
+              Cluster: ${match.cluster}<br>
+              Fund Utilization Ratio: ${match.fund_utilization_ratio.toFixed(
+                2
+              )}<br>
+              Physical Efficiency: ${match.physical_efficiency.toFixed(2)}<br>
+              Cost per Hectare: ${match.cost_per_hectare.toFixed(2)}
+            `;
+              } else {
+                resultBox.innerHTML = "No matching state found.";
+              }
+            });
+        });
+    </script>
+  </body>
+</html>
