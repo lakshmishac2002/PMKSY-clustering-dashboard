@@ -140,6 +140,7 @@
       const clusterColors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"];
       const clusterCounts = [0, 0, 0, 0];
       let stateData = [];
+      let geojsonLayer;
 
       const map = L.map("map").setView([22.5937, 78.9629], 5);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -152,7 +153,7 @@
         .then((geojson) => {
           stateData = geojson.features.map((f) => f.properties);
 
-          L.geoJSON(geojson, {
+          geojsonLayer = L.geoJSON(geojson, {
             style: (feature) => {
               const cluster = feature.properties.cluster ?? 0;
               clusterCounts[cluster]++;
@@ -166,16 +167,16 @@
             onEachFeature: (feature, layer) => {
               const props = feature.properties;
               layer.bindPopup(`
-              <strong>${props.state_name}</strong><br>
-              Cluster: ${props.cluster}<br>
-              Fund Utilization Ratio: ${(
-                props.fund_utilization_ratio ?? 0
-              ).toFixed(2)}<br>
-              Physical Efficiency: ${(props.physical_efficiency ?? 0).toFixed(
-                2
-              )}<br>
-              Cost per Hectare: ${(props.cost_per_hectare ?? 0).toFixed(2)}
-            `);
+                <strong>${props.state_name}</strong><br>
+                Cluster: ${props.cluster}<br>
+                Fund Utilization Ratio: ${(
+                  props.fund_utilization_ratio ?? 0
+                ).toFixed(2)}<br>
+                Physical Efficiency: ${(props.physical_efficiency ?? 0).toFixed(
+                  2
+                )}<br>
+                Cost per Hectare: ${(props.cost_per_hectare ?? 0).toFixed(2)}
+              `);
             },
           }).addTo(map);
 
@@ -209,6 +210,7 @@
             },
           });
 
+          // Handle search & highlight
           document
             .getElementById("stateSearch")
             .addEventListener("input", function () {
@@ -217,24 +219,43 @@
 
               if (!query) {
                 resultBox.innerHTML = "";
+                geojsonLayer.eachLayer((l) => geojsonLayer.resetStyle(l));
                 return;
               }
 
-              const match = stateData.find(
-                (s) => s.state_name.toLowerCase() === query
-              );
+              let found = false;
 
-              if (match) {
-                resultBox.innerHTML = `
-              <strong>${match.state_name}</strong><br>
-              Cluster: ${match.cluster}<br>
-              Fund Utilization Ratio: ${match.fund_utilization_ratio.toFixed(
-                2
-              )}<br>
-              Physical Efficiency: ${match.physical_efficiency.toFixed(2)}<br>
-              Cost per Hectare: ${match.cost_per_hectare.toFixed(2)}
-            `;
-              } else {
+              geojsonLayer.eachLayer((layer) => {
+                const name = layer.feature.properties.state_name.toLowerCase();
+                if (name === query) {
+                  found = true;
+                  // Highlight and zoom
+                  map.fitBounds(layer.getBounds());
+                  layer.setStyle({
+                    color: "red",
+                    weight: 3,
+                    fillOpacity: 0.9,
+                  });
+                  layer.openPopup();
+
+                  const props = layer.feature.properties;
+                  resultBox.innerHTML = `
+                    <strong>${props.state_name}</strong><br>
+                    Cluster: ${props.cluster}<br>
+                    Fund Utilization Ratio: ${props.fund_utilization_ratio.toFixed(
+                      2
+                    )}<br>
+                    Physical Efficiency: ${props.physical_efficiency.toFixed(
+                      2
+                    )}<br>
+                    Cost per Hectare: ${props.cost_per_hectare.toFixed(2)}
+                  `;
+                } else {
+                  geojsonLayer.resetStyle(layer);
+                }
+              });
+
+              if (!found) {
                 resultBox.innerHTML = "No matching state found.";
               }
             });

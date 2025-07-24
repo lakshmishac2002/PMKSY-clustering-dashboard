@@ -60,7 +60,7 @@ def load_and_process_data_statewise():
     kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
     df_state['cluster'] = kmeans.fit_predict(features_scaled)
 
-    # Add missing states to Cluster 0
+    # Add missing states
     missing_states = [
         'chandigarh', 'delhi', 'meghalaya', 'andaman & nicobar', 'lakshadweep',
         'puducherry', 'daman & diu', 'dadra & nagar haveli', 'ladakh', 'jammu & kashmir'
