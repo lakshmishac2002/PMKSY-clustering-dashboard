@@ -24,6 +24,20 @@
         color: white;
         padding: 10px 20px;
         text-align: center;
+        position: relative;
+      }
+
+      .menu-btn {
+        position: absolute;
+        left: 10px;
+        top: 10px;
+        background: #00264d;
+        border: none;
+        color: white;
+        padding: 8px 12px;
+        font-size: 18px;
+        cursor: pointer;
+        border-radius: 4px;
       }
 
       .main {
@@ -32,12 +46,25 @@
         overflow: hidden;
       }
 
+      /* Sidebar behaves like a flex item with fixed basis; collapse truly frees space */
       #sidebar {
+        flex: 0 0 300px;
         width: 300px;
         background-color: #f4f4f4;
         border-right: 1px solid #ccc;
         padding: 20px;
         overflow-y: auto;
+        overflow-x: hidden;
+        box-sizing: border-box;
+        transition: width 0.3s ease, padding 0.3s ease,
+          border-right-width 0.3s ease;
+      }
+
+      #sidebar.collapsed {
+        width: 0;
+        flex-basis: 0;
+        padding: 0;
+        border-right-width: 0;
       }
 
       #sidebar h2 {
@@ -45,7 +72,7 @@
       }
 
       #map {
-        flex-grow: 1;
+        flex: 1 1 auto;
         height: 100%;
       }
 
@@ -69,10 +96,19 @@
       #stateResult {
         margin-bottom: 20px;
       }
+
+      @media (max-width: 900px) {
+        /* Start collapsed on small screens */
+        #sidebar {
+          position: relative;
+          z-index: 2;
+        }
+      }
     </style>
   </head>
   <body>
     <header>
+      <button class="menu-btn" onclick="toggleSidebar()">☰</button>
       <h1>PMKSY State-Wise Performance Clustering Dashboard</h1>
     </header>
     <div class="main">
@@ -128,8 +164,39 @@
           </div>
         </div>
 
+        <h2>Legend</h2>
+        <ul style="list-style: none; padding: 0">
+          <li>
+            <span style="color: #1f77b4">■</span> Cluster 0 – Low Performance
+          </li>
+          <li>
+            <span style="color: #ff7f0e">■</span> Cluster 1 – Moderate
+            Performance
+          </li>
+          <li>
+            <span style="color: #2ca02c">■</span> Cluster 2 – Good Performance
+          </li>
+          <li>
+            <span style="color: #d62728">■</span> Cluster 3 – Excellent
+            Performance
+          </li>
+        </ul>
+
+        <h2>Top & Bottom States</h2>
+        <div
+          id="rankings"
+          style="background: #eef; padding: 10px; border-radius: 5px"
+        ></div>
+
         <h2>Cluster Distribution</h2>
         <canvas id="clusterChart"></canvas>
+
+        <button
+          onclick="window.location.href='/download-data'"
+          style="margin-top: 15px; padding: 8px 12px"
+        >
+          Download Data (CSV)
+        </button>
       </div>
 
       <div id="map"></div>
@@ -137,12 +204,23 @@
 
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
     <script>
+      function toggleSidebar() {
+        const sb = document.getElementById("sidebar");
+        sb.classList.toggle("collapsed");
+        if (window.map) {
+          // Wait for CSS transition to end, then recalc Leaflet layout
+          setTimeout(() => window.map.invalidateSize(), 320);
+        }
+      }
+
       const clusterColors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"];
       const clusterCounts = [0, 0, 0, 0];
       let stateData = [];
       let geojsonLayer;
 
       const map = L.map("map").setView([22.5937, 78.9629], 5);
+      window.map = map; // make accessible to toggleSidebar
+
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 10,
         attribution: "© OpenStreetMap contributors",
@@ -229,7 +307,6 @@
                 const name = layer.feature.properties.state_name.toLowerCase();
                 if (name === query) {
                   found = true;
-                  // Highlight and zoom
                   map.fitBounds(layer.getBounds());
                   layer.setStyle({
                     color: "red",
@@ -259,6 +336,26 @@
                 resultBox.innerHTML = "No matching state found.";
               }
             });
+        });
+
+      // Fetch rankings
+      fetch("/rankings")
+        .then((res) => res.json())
+        .then((data) => {
+          const rankingsBox = document.getElementById("rankings");
+          let html = "<strong>Top 3 States (Fund Utilization):</strong><br>";
+          data.top.forEach((s) => {
+            html += `${s.state_name.toUpperCase()} – ${(
+              s.fund_utilization_ratio * 100
+            ).toFixed(1)}%<br>`;
+          });
+          html += "<br><strong>Bottom 3 States:</strong><br>";
+          data.bottom.forEach((s) => {
+            html += `${s.state_name.toUpperCase()} – ${(
+              s.fund_utilization_ratio * 100
+            ).toFixed(1)}%<br>`;
+          });
+          rankingsBox.innerHTML = html;
         });
     </script>
   </body>

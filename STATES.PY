@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, send_file
 import pandas as pd
 import geopandas as gpd
 from sklearn.preprocessing import StandardScaler
@@ -19,7 +19,7 @@ def load_and_process_data_statewise():
         (df['total_phy_target'].notna()) & (df['total_phy_target'] > 0)
     ].copy()
 
-    #Feature scaling
+    # Feature engineering
     df['fund_utilization_ratio'] = df['total_fin_achievements'] / df['total_fin_target']
     df['physical_efficiency'] = df['total_phy_achievements'] / df['total_phy_target']
     df['cost_per_hectare'] = df['total_fin_achievements'] / df['total_phy_achievements']
@@ -27,7 +27,6 @@ def load_and_process_data_statewise():
     # Normalize state names
     df['state_name'] = df['state_name'].str.lower().str.strip()
 
-    # Fix mismatches between CSV and GeoJSON
     state_name_mapping = {
         'andaman and nicobar islands': 'andaman & nicobar',
         'andaman & nicobar islands': 'andaman & nicobar',
@@ -60,7 +59,7 @@ def load_and_process_data_statewise():
     kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
     df_state['cluster'] = kmeans.fit_predict(features_scaled)
 
-    # Add missing states
+    # Add missing states with zeros
     missing_states = [
         'chandigarh', 'delhi', 'meghalaya', 'andaman & nicobar', 'lakshadweep',
         'puducherry', 'daman & diu', 'dadra & nagar haveli', 'ladakh', 'jammu & kashmir'
@@ -87,9 +86,6 @@ def merge_geojson_with_state_data(df_state):
     geojson_path = os.path.join(os.path.dirname(__file__), "INDIA_STATES.geojson")
     gdf = gpd.read_file(geojson_path)
 
-    print("GeoJSON Columns:", gdf.columns)
-
-    # Find the matching state column
     state_col = None
     for col in gdf.columns:
         if col.lower() in ["state", "state_name", "name_1", "stname"]:
@@ -99,18 +95,9 @@ def merge_geojson_with_state_data(df_state):
     if state_col is None:
         raise KeyError("Could not find a matching state column in GeoJSON.")
 
-    # Normalize state names in GeoJSON
     gdf[state_col] = gdf[state_col].str.lower().str.strip()
 
-    # Show unmatched states (if any)
-    unmatched = gdf[~gdf[state_col].isin(df_state['state_name'])]
-    print("\n⚠️ Unmatched States in GeoJSON:")
-    print(unmatched[state_col].unique())
-
-    # Merge GeoJSON with clustered data
     merged = gdf.merge(df_state, how='left', left_on=state_col, right_on='state_name')
-
-    # Select and rename columns
     merged = merged[['geometry', state_col, 'fund_utilization_ratio', 'physical_efficiency', 'cost_per_hectare', 'cluster']]
     merged = merged.rename(columns={state_col: 'state_name'})
 
@@ -125,6 +112,24 @@ def cluster_data():
     df_state = load_and_process_data_statewise()
     merged_geojson = merge_geojson_with_state_data(df_state)
     return jsonify(json.loads(merged_geojson))
+
+@app.route('/download-data')
+def download_data():
+    df_state = load_and_process_data_statewise()
+    csv_path = os.path.join(os.path.dirname(__file__), "processed_data.csv")
+    df_state.to_csv(csv_path, index=False)
+    return send_file(csv_path, as_attachment=True)
+
+@app.route('/rankings')
+def rankings():
+    df_state = load_and_process_data_statewise()
+    top_states = df_state.nlargest(3, 'fund_utilization_ratio')[['state_name', 'fund_utilization_ratio']]
+    bottom_states = df_state.nsmallest(3, 'fund_utilization_ratio')[['state_name', 'fund_utilization_ratio']]
+
+    return jsonify({
+        "top": top_states.to_dict(orient="records"),
+        "bottom": bottom_states.to_dict(orient="records")
+    })
 
 if __name__ == '__main__':
     app.run(debug=True)
